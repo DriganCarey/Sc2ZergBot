@@ -1,6 +1,9 @@
 # Sc2ZergBot
 A bot that should hopefully be able to make decisions and follow build orders in order to play the strategy game known as starcraft II
 
+For now:
+  Build a passive bot that will aim to max out on roach ravager on 3 base and then a-move the enemy
+
 My aim:
   1. Economy (passive):
     i. Managing drones - no idle drones, mining enough gas to mineral ratio, oversatured bases
