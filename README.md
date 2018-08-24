@@ -20,3 +20,6 @@ My aim:
   ....
   x. Bot will be able to choose a build order at the beginning of the game and attempt to follow the build order, making decisions/changes as it sees fit to react to the opponent
   x + 1. Machine learning?
+
+Other details:
+  I want to try and build a decision tree - the bot should only try to take one action at a time
