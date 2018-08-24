@@ -24,3 +24,4 @@ My aim:
 
 Other details:
   I want to try and build a decision tree - the bot should only try to take one action at a time
+  Want to attempt to randomise choices in order to prevent bot from acting completely predictably
