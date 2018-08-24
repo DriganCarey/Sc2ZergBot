@@ -2,13 +2,14 @@
 A bot that should hopefully be able to make decisions and follow build orders in order to play the strategy game known as starcraft II
 
 My aim:
-  1. Build a basic economy bot that will be able to build drones, overlords and expand at the appropiate times to avoid supply blocks or floating larva
-  2. Bot should be able to do a simple 17 hatch 18 gas 17 pool opener
-  3. Bot should build injecting queens and inject constantly
-  4. Bot should try to avoid floating whenever possible
-  5. Bot should be able to scout
-  6. Attacking
-  7. Micro
+  1. Bot will be able to manage and produce drones
+  2. + build overlords to avoid supply blocks
+  3. Bot should be able to do a simple 17 hatch 18 gas 17 pool opener
+  4. Bot should build injecting queens and inject constantly
+  5. Bot should try to avoid floating whenever possible
+  6. Bot should be able to scout
+  7. Attacking
+  8. Micro
   ....
   a. Bot can defeat the very easy ai
   b. Bot can defeat the easy ai
