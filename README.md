@@ -2,11 +2,12 @@
 A bot that should hopefully be able to make decisions and follow build orders in order to play the strategy game known as starcraft II
 
 My aim:
-  1. Bot will be able to manage and produce drones
-  2. + build overlords to avoid supply blocks
+  1. Bot will be able to manage (pull idle drones to mine and move drones from oversaturated bases) and produce drones
+  2. build overlords to avoid supply blocks
   3. Bot should be able to do a simple 17 hatch 18 gas 17 pool opener
   4. Bot should build injecting queens and inject constantly
   5. Bot should try to avoid floating whenever possible
+  6. Follow a 13 12 build order randomly
   6. Bot should be able to scout
   7. Attacking
   8. Micro
