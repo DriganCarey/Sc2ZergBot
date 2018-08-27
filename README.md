@@ -2,7 +2,7 @@
 A bot that should hopefully be able to make decisions and follow build orders in order to play the strategy game known as starcraft II
 
 For now:<br />
-  Building some functions that are able to predict the amount of larva in the next x seconds and income in the next x seconds<br />
+  Building some functions that are able to predict the amount of larva in the next x seconds and income in the next x seconds if the user does not do anything<br />
 
 My aim:<br />
   1. Economy (passive):<br />
