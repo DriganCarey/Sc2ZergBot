@@ -16,6 +16,7 @@ class ZergBotV2(sc2.BotAI):
 		self.unit_production_list = ["DRONE"]
 		self.unit_production = []
 		self.drone_saturation = False
+		self.attacking = False
 
 	# GET ALL AVALIABLE VESPENE GEYSERS
 	# gets a list of vespene geysers that aren't occupied, are next to a finished hatchery and aren't empty
@@ -111,13 +112,31 @@ class ZergBotV2(sc2.BotAI):
 			if self.can_afford(SPAWNINGPOOL):
 				await self.build(SPAWNINGPOOL, near = self.units(HATCHERY).ready.first)
 
-	async def larva_controller(self):
+	async def attack(self):
+		if self.units(ROACH).amount > 30:
+			for s in self.units(ROACH).idle:
+				await self.do(s.attack(self.find_target(self.state)))
+
+		elif self.units(ROACH).amount > 3:
+			if len(self.known_enemy_units) > 0:
+				for s in self.units(ROACH).idle:
+					await self.do(s.attack(random.choice(self.known_enemy_units)))
+
+	def larva_controller(self):
 		if self.drone_count < 33 or not self.units(ROACHWARREN).ready.exists:
 			self.unit_production_list = ["DRONE"]
 		elif self.drone_count < 70 and self.units(ROACHWARREN).ready.exists:
 			self.unit_production_list = ["DRONE", "ROACH"]
 		else:
 			self.unit_production_list = ["ROACH"]
+
+	def find_target(self, state):
+		if len(self.known_enemy_units) > 0:
+			return random.choice(self.known_enemy_units)
+		elif len(self.known_enemy_structures) > 0:
+			return random.choice(self.known_enemy_structures)
+		else:
+			return self.enemy_start_locations[0]
 
 	# DRONES NOT BEING PUT INTO GAS
 	# DELAY IN BUILDING EXTRACTOR AFTER FINISHING ONE?
@@ -137,14 +156,15 @@ class ZergBotV2(sc2.BotAI):
 				self.drone_saturation = True
 
 			# defaulting to inbuilt function for now, await self.manage_drones()
+			self.larva_controller()
 			await self.distribute_workers()
-			await self.larva_controller()
 			await self.build_overlords()
 			await self.offensive_force_buildings()
 			if all(self.unit_production):
 				await self.build_units()
 			if all(self.is_expanding):
 				await self.expand()
+			await self.attack()
 			await self.gas()
 		
 		
@@ -153,5 +173,5 @@ class ZergBotV2(sc2.BotAI):
 # first parameter is the map
 # second parameter is the list of players/bots
 # third is whether the game should be in a realtime, or sped up
-run_game(maps.get("AbyssalReefLE"), [Bot(Race.Zerg, ZergBotV2()), Computer(Race.Zerg, Difficulty.Easy)], realtime = True)
+run_game(maps.get("AbyssalReefLE"), [Bot(Race.Zerg, ZergBotV2()), Computer(Race.Zerg, Difficulty.Easy)], realtime = False)
 
