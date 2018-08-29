@@ -86,7 +86,7 @@ class ZergBotV2(sc2.BotAI):
 			vgs = self.get_avaliable_gysers(hatch)
 			if len(vgs) > 0:
 				vg = vgs[0]
-				if (self.can_afford(EXTRACTOR)):
+				if self.can_afford(EXTRACTOR) and not self.already_pending(EXTRACTOR):
 					worker = self.select_build_worker(vg.position)
 					if worker is not None:
 						await self.do(worker.build(EXTRACTOR, vg))
@@ -94,7 +94,7 @@ class ZergBotV2(sc2.BotAI):
 
 
 	# DRONES NOT BEING PUT INTO GAS
-	# MULTIPLE DRONES BEING PULLED
+	# DELAY IN BUILDING EXTRACTOR AFTER FINISHING ONE?
 	async def on_step(self, iteration):
 		if iteration == 0:
 			print("Bot has started iteration 0")
