@@ -62,22 +62,27 @@ class ZergBotV2(sc2.BotAI):
 					break
 
 	async def build_units(self):
-		if self.units(LARVA).exists and all(self.unit_production):
+		if self.units(LARVA).exists:
 			if self.unit_production_index < len(self.unit_production_list):
 				current_unit = self.unit_production_list[self.unit_production_index]
 				if current_unit == "DRONE":
 					if self.can_afford(DRONE) and self.supply_left >= 1:
 						await self.do(self.units(LARVA).random.train(DRONE))
+						self.unit_production_index += 1
+				elif current_unit == "ROACH":
+					if self.can_afford(ROACH) and self.supply_left >= 2:
+						await self.do(self.units(LARVA).random.train(ROACH))
+						self.unit_production_index += 1
 			else:
 				self.unit_production_index = 0
 
 	async def build_overlords(self):
-		if self.supply_left < 5 and not self.already_pending(OVERLORD):
+		if self.supply_left + (self.already_pending(OVERLORD)*8) < (5 * self.townhalls.ready.amount):
 			if self.units(LARVA).exists and self.can_afford(OVERLORD):
 				await self.do(self.units(LARVA).random.train(OVERLORD))
 
 	async def expand(self):
-		if self.townhalls.amount < 2 and self.can_afford(HATCHERY):
+		if self.townhalls.amount < 3 and self.can_afford(HATCHERY):
 			await self.expand_now()
 
 	async def gas(self):
@@ -92,9 +97,33 @@ class ZergBotV2(sc2.BotAI):
 						await self.do(worker.build(EXTRACTOR, vg))
 				break
 
+	async def offensive_force_buildings(self):
+		if self.units(SPAWNINGPOOL).ready.exists:
+			if self.drone_count > 33:
+				if not self.already_pending(ROACHWARREN) and not self.units(ROACHWARREN).exists:
+					 self.unit_production.append(False)
+					 self.is_expanding.append(False)
+					 if self.can_afford(ROACHWARREN):
+					 	await self.build(ROACHWARREN, near = self.units(HATCHERY).ready.first)
+		elif not self.already_pending(SPAWNINGPOOL) and self.drone_count > 18:
+			self.unit_production.append(False)
+			self.is_expanding.append(False)
+			if self.can_afford(SPAWNINGPOOL):
+				await self.build(SPAWNINGPOOL, near = self.units(HATCHERY).ready.first)
+
+	async def larva_controller(self):
+		if self.drone_count < 33 or not self.units(ROACHWARREN).ready.exists:
+			self.unit_production_list = ["DRONE"]
+		elif self.drone_count < 70 and self.units(ROACHWARREN).ready.exists:
+			self.unit_production_list = ["DRONE", "ROACH"]
+		else:
+			self.unit_production_list = ["ROACH"]
 
 	# DRONES NOT BEING PUT INTO GAS
 	# DELAY IN BUILDING EXTRACTOR AFTER FINISHING ONE?
+	# Building location - NOT in mineral line, in first base
+	# built more drones that 70 (76), but did stop in the end
+	# prioritise gas gysers in main b4 2nd or 3rd
 	async def on_step(self, iteration):
 		if iteration == 0:
 			print("Bot has started iteration 0")
@@ -102,14 +131,20 @@ class ZergBotV2(sc2.BotAI):
 			# updating variables
 			self.drone_count = self.units(DRONE).amount + self.already_pending(DRONE)
 			self.unit_production = [True]
+			self.is_expanding = [True]
 			self.drone_saturation = False
 			if (self.get_unsaturated_bases().amount == 0):
 				self.drone_saturation = True
 
-			await self.manage_drones()
+			# defaulting to inbuilt function for now, await self.manage_drones()
+			await self.distribute_workers()
+			await self.larva_controller()
 			await self.build_overlords()
-			await self.build_units()
-			await self.expand()
+			await self.offensive_force_buildings()
+			if all(self.unit_production):
+				await self.build_units()
+			if all(self.is_expanding):
+				await self.expand()
 			await self.gas()
 		
 		
