@@ -79,7 +79,7 @@ class ZergBotV2(sc2.BotAI):
 				self.unit_production_index = 0
 
 	async def build_overlords(self):
-		if self.supply_left + (self.already_pending(OVERLORD)*8) < (5 * self.townhalls.ready.amount):
+		if self.supply_left + (self.already_pending(OVERLORD)*8) < (5 * self.townhalls.ready.amount) and self.supply_cap + self.already_pending(OVERLORD) * 8 < 200:
 			if self.units(LARVA).exists and self.can_afford(OVERLORD):
 				await self.do(self.units(LARVA).random.train(OVERLORD))
 
