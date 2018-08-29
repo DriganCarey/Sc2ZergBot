@@ -15,18 +15,18 @@ class ZergBotV2(sc2.BotAI):
 		self.unit_production_index = 0
 		self.unit_production_list = ["DRONE"]
 		self.unit_production = []
+		self.drone_saturation = False
 
 	# GET ALL AVALIABLE VESPENE GEYSERS
 	# gets a list of vespene geysers that aren't occupied, are next to a finished hatchery and aren't empty
 	# DOESNT CHECK IF THERE ARE EMPTY and whether are blocked
-	def get_avaliable_gysers(self):
-		# creates a list of viable gysers near hatcheries
+	def get_avaliable_gysers(self, hatchery: "Unit"):
+		# creates a list of viable gysers near hatchery
 		vespeneGeysers = []
-		for hatchery in self.units(HATCHERY):
-			for vg in self.state.vespene_geyser.closer_than(10, hatchery):
-				# checking if the vg is already occupied
-				if not (self.units(EXTRACTOR).closer_than(1.0, vg).exists or self.units(ASSIMILATOR).closer_than(1.0, vg).exists or self.units(REFINERY).closer_than(1.0, vg).exists):
-					vespeneGeysers.append(vg)
+		for vg in self.state.vespene_geyser.closer_than(10, hatchery):
+			# checking if the vg is already occupied
+			if not (self.units(EXTRACTOR).closer_than(1.0, vg).exists or self.units(ASSIMILATOR).closer_than(1.0, vg).exists or self.units(REFINERY).closer_than(1.0, vg).exists):
+				vespeneGeysers.append(vg)
 		return vespeneGeysers
 
 	#variable definitions:
@@ -37,6 +37,10 @@ class ZergBotV2(sc2.BotAI):
 	@property
 	def get_oversaturated_bases(self) -> "Units":
 		return self.townhalls.filter(lambda x: x.assigned_harvesters > x.ideal_harvesters)
+
+	@property
+	def get_saturated(self) -> "Units":
+		return self.townhalls.filter(lambda x: x.assigned_harvesters >= x.ideal_harvesters)
 
 	async def manage_drones(self):
 		# MANANGING DRONES:
@@ -72,14 +76,41 @@ class ZergBotV2(sc2.BotAI):
 			if self.units(LARVA).exists and self.can_afford(OVERLORD):
 				await self.do(self.units(LARVA).random.train(OVERLORD))
 
+	async def expand(self):
+		if self.townhalls.amount < 2 and self.can_afford(HATCHERY):
+			await self.expand_now()
+
+	async def gas(self):
+		saturated = self.get_saturated()
+		for hatch in saturated.filter(lambda h: h.build_progress > 0.71):
+			vgs = self.get_avaliable_gysers(hatch)
+			if len(vgs) > 0:
+				vg = vgs[0]
+				if (self.can_afford(EXTRACTOR)):
+					worker = self.select_build_worker(vg.position)
+					if worker is not None:
+						await self.do(worker.build(EXTRACTOR, vg))
+				break
+
+
+	# DRONES NOT BEING PUT INTO GAS
+	# MULTIPLE DRONES BEING PULLED
 	async def on_step(self, iteration):
-		# updating variables
-		self.drone_count = self.units(DRONE).amount + self.already_pending(DRONE)
-		self.unit_production = [True]
-		
-		await self.manage_drones()
-		await self.build_overlords()
-		await self.build_units()
+		if iteration == 0:
+			print("Bot has started iteration 0")
+		if iteration % 5 == 0:
+			# updating variables
+			self.drone_count = self.units(DRONE).amount + self.already_pending(DRONE)
+			self.unit_production = [True]
+			self.drone_saturation = False
+			if (self.get_unsaturated_bases().amount == 0):
+				self.drone_saturation = True
+
+			await self.manage_drones()
+			await self.build_overlords()
+			await self.build_units()
+			await self.expand()
+			await self.gas()
 		
 		
 	
