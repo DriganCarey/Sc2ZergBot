@@ -126,7 +126,7 @@ class ZergBotV2(sc2.BotAI):
 	# prioritise gas gysers in main b4 2nd or 3rd
 	async def on_step(self, iteration):
 		if iteration == 0:
-			print("Bot has started iteration 0")
+			print("Bot has started iteration: " + str(iteration))
 		if iteration % 5 == 0:
 			# updating variables
 			self.drone_count = self.units(DRONE).amount + self.already_pending(DRONE)
