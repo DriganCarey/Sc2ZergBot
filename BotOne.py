@@ -177,4 +177,5 @@ class ZergBotV2(sc2.BotAI):
 # second parameter is the list of players/bots
 # third is whether the game should be in a realtime, or sped up
 for i in range(5):
-	run_game(maps.get("AbyssalReefLE"), [Bot(Race.Zerg, ZergBotV2()), Computer(Race.Random, Difficulty.Easy)], realtime = False)
+	print (i)
+	run_game(maps.get("AbyssalReefLE"), [Bot(Race.Zerg, ZergBotV2()), Computer(Race.Random, Difficulty.Medium)], realtime = False)
