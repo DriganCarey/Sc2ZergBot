@@ -36,7 +36,7 @@ My aim:<br />
   a. Bot has defeated the very easy ai ☑<br />
   b. Bot can defeat the very easy ai consistently (5 times in a row) ☑<br />
   c. Bot has defeated the easy ai ☑<br />
-  d. Bot can defeat the easy ai consistently (5 times in a row)<br />
+  d. Bot can defeat the easy ai consistently (5 times in a row) ☑<br />
   e. Bot has defeated the medium ai ✘<br />
   f. Bot can defeat the medium ai consistently (5 times in a row) ✘<br />
   g. Bot has defeated the hard ai ✘<br />
