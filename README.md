@@ -5,15 +5,15 @@ For now:<br />
   Refinining my basic bot so that it is more efficient<br />
   Current Loses and reasons:  <br  />
     Game 1 vs Medium Terran: LOSS - kept flooding units into enemy base, targetting issue (targetting scvs over sieged tanks)<br  />
-    Game 2 vs Medium Terran: WIN - choke points of ramps? typical a move problem
-    Game 3 vs Medium Protoss: WIN
-    Game 4 vs Medium Protoss: LOSS - unit flood and targetting again
-    Game 5 vs Medium Zerg: WIN
+    Game 2 vs Medium Terran: WIN - choke points of ramps? typical a move problem<br  />
+    Game 3 vs Medium Protoss: WIN<br  />
+    Game 4 vs Medium Protoss: LOSS - unit flood and targetting again<br  />
+    Game 5 vs Medium Zerg: WIN<br  />
   Low priority issues:<br  />
     not expanding after bases run out of minerals<br  />
     upgrades? roach speed and +1+1<br  />
     building location of pool and warren (can be in mineral line)<br  />
-    anti-air?
+    anti-air?<br  />
   Other expansions:<br  />
     scouting<br  />
     queens (inject and creep spread)<br  />
@@ -51,7 +51,7 @@ My aim:<br />
   b. Bot can defeat the very easy ai consistently (5 times in a row) ☑<br />
   c. Bot has defeated the easy ai ☑<br />
   d. Bot can defeat the easy ai consistently (5 times in a row) ☑<br />
-  e. Bot has defeated the medium ai ✘<br />
+  e. Bot has defeated the medium ai ☑<br />
   f. Bot can defeat the medium ai consistently (5 times in a row) ✘<br />
   g. Bot has defeated the hard ai ✘<br />
   h. Bot can defeat the hard ai consistently (5 times in a row) ✘<br />
