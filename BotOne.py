@@ -16,7 +16,8 @@ class ZergBotV2(sc2.BotAI):
 		self.unit_production_list = ["DRONE"]
 		self.unit_production = []
 		self.drone_saturation = False
-		self.attacking = False
+		self.can_attack_air = []
+		self.can_attack_ground = [ROACH, DRONE]
 
 	# GET ALL AVALIABLE VESPENE GEYSERS
 	# gets a list of vespene geysers that aren't occupied, are next to a finished hatchery and aren't empty
@@ -33,15 +34,15 @@ class ZergBotV2(sc2.BotAI):
 	#variable definitions:
 	@property
 	def get_unsaturated_bases(self) -> "Units":
-		return self.townhalls.filter(lambda x: x.assigned_harvesters < x.ideal_harvesters)
+		return self.townhalls.ready.filter(lambda x: x.assigned_harvesters < x.ideal_harvesters)
 
 	@property
 	def get_oversaturated_bases(self) -> "Units":
-		return self.townhalls.filter(lambda x: x.assigned_harvesters > x.ideal_harvesters)
+		return self.townhalls.ready.filter(lambda x: x.assigned_harvesters > x.ideal_harvesters)
 
 	@property
 	def get_saturated(self) -> "Units":
-		return self.townhalls.filter(lambda x: x.assigned_harvesters >= x.ideal_harvesters)
+		return self.townhalls.ready.filter(lambda x: x.assigned_harvesters >= x.ideal_harvesters)
 
 	async def manage_drones(self):
 		# MANANGING DRONES:
@@ -88,7 +89,7 @@ class ZergBotV2(sc2.BotAI):
 
 	async def gas(self):
 		saturated = self.get_saturated()
-		for hatch in saturated.filter(lambda h: h.build_progress > 0.71):
+		for hatch in saturated:
 			vgs = self.get_avaliable_gysers(hatch)
 			if len(vgs) > 0:
 				vg = vgs[0]
@@ -115,12 +116,13 @@ class ZergBotV2(sc2.BotAI):
 	async def attack(self):
 		if self.units(ROACH).amount > 30:
 			for s in self.units(ROACH).idle:
-				await self.do(s.attack(self.find_target(self.state)))
+				await self.do(s.attack(self.find_target(self.state, s)))
 
 		elif self.units(ROACH).amount > 3:
-			if len(self.known_enemy_units) > 0:
+			enemy_units = self.known_enemy_units.filter(lambda x: (not x.is_flying))
+			if len(enemy_units) > 0:
 				for s in self.units(ROACH).idle:
-					await self.do(s.attack(random.choice(self.known_enemy_units)))
+					await self.do(s.attack(random.choice(enemy_units)))
 
 	def larva_controller(self):
 		if self.drone_count < 33 or not self.units(ROACHWARREN).ready.exists:
@@ -130,10 +132,11 @@ class ZergBotV2(sc2.BotAI):
 		else:
 			self.unit_production_list = ["ROACH"]
 
-	def find_target(self, state):
-		if len(self.known_enemy_units) > 0:
-			return random.choice(self.known_enemy_units)
-		elif len(self.known_enemy_structures) > 0:
+	def find_target(self, state, attacking_unit: "Unit"):
+		enemy_units = self.known_enemy_units.filter(lambda x: (x.is_flying and attacking_unit.type_id in self.can_attack_air) or (not x.is_flying and attacking_unit.type_id in self.can_attack_ground))
+		if len(enemy_units) > 0:
+			return random.choice(enemy_units)
+		elif len(self.known_enemy_structures) > 0 and attacking_unit.type_id in canAttackGround:
 			return random.choice(self.known_enemy_structures)
 		else:
 			return self.enemy_start_locations[0]
@@ -173,5 +176,5 @@ class ZergBotV2(sc2.BotAI):
 # first parameter is the map
 # second parameter is the list of players/bots
 # third is whether the game should be in a realtime, or sped up
-run_game(maps.get("AbyssalReefLE"), [Bot(Race.Zerg, ZergBotV2()), Computer(Race.Zerg, Difficulty.Easy)], realtime = False)
-
+for i in range(5):
+	run_game(maps.get("AbyssalReefLE"), [Bot(Race.Zerg, ZergBotV2()), Computer(Race.Random, Difficulty.Easy)], realtime = False)
