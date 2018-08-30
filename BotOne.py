@@ -18,13 +18,26 @@ class ZergBotV2(sc2.BotAI):
 		self.unit_production_index = 0
 		self.unit_production_list = [DRONE ]
 		self.unit_production = []
+		self.overlord_production = False
 
 		self.can_attack_air = [QUEEN, HYDRALISK, MUTALISK, CORRUPTOR]
 		self.can_attack_ground = [ROACH, DRONE, QUEEN, BANELING, RAVAGER, HYDRALISK, ULTRALISK, MUTALISK, BROODLORD]
-
 		self.attack = False
 		self.defend = True
 		self.defendRangeToTownhalls = 30 # how close the enemy has to be before defenses are alerted
+
+		self.opponentInfo = {
+			"spawnLocation": None, # for 4player maps
+			"expansions": [], # stores a list of Point2 objects of expansions
+			"expansionsTags": set(), # stores the expansions above as tags so we dont count them double
+			"furthestAwayExpansion": None, # stores the expansion furthest away - important for spine crawler and pool placement
+			"race": None,
+			"armyTagsScouted": [], # list of dicts with entries: {"tag": 123, "scoutTime": 15.6, "supply": 2}
+			"armySupplyScouted": 0,
+			"armySupplyScoutedClose": 0,
+			"armySupplyVisible": 0,
+			"scoutingUnitsNeeded": 0,
+        }
 
 		self.creepSpreadInterval = 10
 		self.injectInterval = 100
@@ -32,47 +45,38 @@ class ZergBotV2(sc2.BotAI):
 		self.buildStuffInverval = 4
 		self.microInterval = 3
 
-	#variable definitions:
-	def get_unsaturated_bases(self) -> Units:
-		return self.townhalls.ready.filter(lambda x: x.assigned_harvesters < x.ideal_harvesters)
 
-	def get_oversaturated_bases(self) -> Units:
-		return self.townhalls.ready.filter(lambda x: x.assigned_harvesters > x.ideal_harvesters)
 
-	def get_saturated(self) -> Units:
-		return self.townhalls.ready.filter(lambda x: x.assigned_harvesters >= x.ideal_harvesters)
+	#######################
+	''' UNIT PRODUCTION '''
+	#######################
+	# checks whether overlords are required
+	def do_overlord_production(self):
+		if not self.overlord_production:
+			pending_supply = self.already_pending(OVERLORD) * 8 + self.supply_left
+			if self.supply_used + pending_supply < 200:
+				if pending_supply < 5 * self.townhalls.ready.amount:
+					self.unit_production.append(False)
+					self.overlord_production = True
 
-	async def manage_drones(self):
-		# MANANGING DRONES:
-		# idle drones
-		for idle_worker in self.units(DRONE).idle:
-			if (self.get_unsaturated_bases.exists):
-				target_hatch = self.get_unsaturated_bases.closest_to(idle_worker)
-			else:
-				target_hatch = self.townhalls.closest_to(idle_worker)
-			# checking if there is an unsaturated base and assigning worker to closest one
-			await self.do(idle_worker.gather(self.state.mineral_field.closest_to(target_hatch)))
-			break
-		# oversaturated mineral lines (only manages if there are un-saturated bases)
-		if not self.drone_saturation:
-			for original_hatch in self.get_oversaturated_bases():
-				for random_worker in self.workers.closer_than(17, original_hatch):
-					target_hatch = self.get_unsaturated_bases.closest_to(original_hatch)
-					await self.do(random_worker.gather(self.state.mineral_field.closest_to(target_hatch)))
-					break
-
-	# BUILDING VARIABLE UNITS
+	# controlls the production list, which is the ratio of units produced from larva
 	def larva_controller(self):
-		if self.drone_count < 33 or not self.units(ROACHWARREN).ready.exists:
+		if self.drone_count <= 33:
 			self.unit_production_list = [DRONE]
-		elif self.drone_count < 70 and self.units(ROACHWARREN).ready.exists:
+		elif self.drone_count <= 70 and self.units(ROACHWARREN).ready.exists:
 			self.unit_production_list = [DRONE, ROACH]
-		else:
+		elif self.drone_count > 70 and self.units(ROACHWARREN).ready.exists:
 			self.unit_production_list = [ROACH]
+		else:
+			self.unit_production_list = [DRONE]
 
+	# builds the units according to the production list and overlord_production
 	async def build_units(self):
 		if self.units(LARVA).exists:
-			if self.unit_production_index < len(self.unit_production_list):
+			if not self.overlord_production and all(self.unit_production):
+				# resets index if it exceeds boundary
+				if self.unit_production_index >= len(self.unit_production_list):
+					self.unit_production_index = 0
 				current_unit = self.unit_production_list[self.unit_production_index]
 				if current_unit in [DRONE, ZERGLING]:
 					if self.can_afford(current_unit) and self.supply_left >= 1:
@@ -82,57 +86,56 @@ class ZergBotV2(sc2.BotAI):
 					if self.can_afford(current_unit) and self.supply_left >= 2:
 						await self.do(self.units(LARVA).random.train(current_unit))
 						self.unit_production_index += 1
-			else:
-				self.unit_production_index = 0
-
-	async def build_overlords(self):
-		if self.supply_left + (self.already_pending(OVERLORD)*8) < (5 * self.townhalls.ready.amount) and self.supply_cap + self.already_pending(OVERLORD) * 8 < 200:
-			if self.units(LARVA).exists and self.can_afford(OVERLORD):
+			elif self.overlord_production and self.can_afford(OVERLORD):
 				await self.do(self.units(LARVA).random.train(OVERLORD))
+				self.overlord_production = False
 
-	# BUILDING BUILDINGS
-	# GET ALL AVALIABLE VESPENE GEYSERS
-	# gets a list of vespene geysers that aren't occupied, are next to a finished hatchery and aren't empty
-	# DOESNT CHECK IF THERE ARE EMPTY and whether are blocked
-	def get_avaliable_gysers(self, hatchery: Unit):
-		# creates a list of viable gysers near hatchery
-		vespeneGeysers = []
-		for vg in self.state.vespene_geyser.closer_than(10, hatchery):
-			# checking if the vg is already occupied
-			if not (self.units(EXTRACTOR).closer_than(1.0, vg).exists or self.units(ASSIMILATOR).closer_than(1.0, vg).exists or self.units(REFINERY).closer_than(1.0, vg).exists):
-				vespeneGeysers.append(vg)
-		return vespeneGeysers
+	###########################
+	#self.units.not_structure.filter(lambda x:x.type_id not in [DRONE, LARVA, OVERLORD, ZERGLING]).amount
+	''' BUILDING PRODUCTION '''
+	###########################
+	# returns a list of avaliable, non-empty vespene gysers that aren't occupied that are next to the specified hatchery
+	# DOESNT CHECK FOR WHETHER UNIT IS BLOCKING PLACEMENT OF EXTRACTOR
+	def get_avaliable_gysers(self, hatchery: Unit) -> Units:
+		return self.state.vespene_geyser.closer_than(10, hatchery).filter(lambda x:
+			x.vespene_contents > 0 and not (self.units(EXTRACTOR)|self.known_enemy_units.structure|self.units(ASSIMILATOR)|self.units(REFINERY)).closer_than(1.0, x).exists)
 
 	async def expand(self):
-		if self.townhalls.amount < 3 and self.can_afford(HATCHERY):
+		if all(self.is_expanding) and self.townhalls.amount < 3 and self.can_afford(HATCHERY):
 			await self.expand_now()
 
 	async def gas(self):
 		saturated = self.get_saturated()
 		for hatch in saturated:
 			vgs = self.get_avaliable_gysers(hatch)
-			if len(vgs) > 0:
-				vg = vgs[0]
+			for vg in vgs:
 				if self.can_afford(EXTRACTOR) and not self.already_pending(EXTRACTOR):
 					worker = self.select_build_worker(vg.position)
 					if worker is not None:
 						await self.do(worker.build(EXTRACTOR, vg))
-				break
+						return
 
 	async def offensive_force_buildings(self):
-		if self.units(SPAWNINGPOOL).ready.exists:
+		if not self.units(SPAWNINGPOOL).ready.exists and not self.already_pending(SPAWNINGPOOL):
+			if self.time > 60:
+				self.unit_production.append(False)
+				self.is_expanding.append(False)
+				if self.can_afford(SPAWNINGPOOL):
+					await self.build(SPAWNINGPOOL, near = self.units(HATCHERY).ready.first)
+		elif self.units(SPAWNINGPOOL).ready.exists:
 			if self.drone_count > 33:
 				if not self.already_pending(ROACHWARREN) and not self.units(ROACHWARREN).exists:
-					 self.unit_production.append(False)
-					 self.is_expanding.append(False)
-					 if self.can_afford(ROACHWARREN):
-					 	await self.build(ROACHWARREN, near = self.units(HATCHERY).ready.first)
-		elif not self.already_pending(SPAWNINGPOOL) and self.drone_count > 18:
-			self.unit_production.append(False)
-			self.is_expanding.append(False)
-			if self.can_afford(SPAWNINGPOOL):
-				await self.build(SPAWNINGPOOL, near = self.units(HATCHERY).ready.first)
+					self.unit_production.append(False)
+					self.is_expanding.append(False)
+					if self.can_afford(ROACHWARREN):
+						await self.build(ROACHWARREN, near = self.units(HATCHERY).ready.first)
 
+
+
+	############################################
+	''' MICRO/ATTACKING UNIT DECISION MAKING '''
+	############################################
+	# makes decision whether to be attacking and or defending
 	async def attack_decision(self):
 		if self.units(ROACH).amount > 30:
 			self.attack = True
@@ -142,6 +145,7 @@ class ZergBotV2(sc2.BotAI):
 			self.attack = False
 			self.defend = True
 
+	# acting upon decision above
 	async def attacking(self):
 		if self.attack and not self.defend:
 			myArmy = self.units(ROACH)
@@ -158,6 +162,7 @@ class ZergBotV2(sc2.BotAI):
 				#else:
 				#	await self.do(unit.move(self.townhalls.random))
 
+	# finding targets
 	def find_defense_target(self, state, attacking_unit: Unit):
 		# add threats: all enemy units that are closer than 30 to nearby townhalls (which are completed)
 		unit_threats = set()
@@ -182,14 +187,47 @@ class ZergBotV2(sc2.BotAI):
 			return self.enemy_start_locations[0]
 
 
-	# DRONES NOT BEING PUT INTO GAS
-	# DELAY IN BUILDING EXTRACTOR AFTER FINISHING ONE?
+	#######################
+	''' BASIC FUNCTIONS '''
+	#######################
+	def get_unsaturated_bases(self) -> Units:
+		return self.townhalls.ready.filter(lambda x: x.assigned_harvesters < x.ideal_harvesters)
+
+	def get_oversaturated_bases(self) -> Units:
+		return self.townhalls.ready.filter(lambda x: x.assigned_harvesters > x.ideal_harvesters)
+
+	def get_saturated(self) -> Units:
+		return self.townhalls.ready.filter(lambda x: x.assigned_harvesters >= x.ideal_harvesters)
+
+	#UNFINISHED
+	############################################################################################################
+	#async def manage_drones(self):
+	#	# MANANGING DRONES:
+	#	# idle drones
+	#	for idle_worker in self.units(DRONE).idle:
+	#		if (self.get_unsaturated_bases.exists):
+	#			target_hatch = self.get_unsaturated_bases.closest_to(idle_worker)
+	#		else:
+	#			target_hatch = self.townhalls.closest_to(idle_worker)
+	#		# checking if there is an unsaturated base and assigning worker to closest one
+	#		await self.do(idle_worker.gather(self.state.mineral_field.closest_to(target_hatch)))
+	#		break
+	#	# oversaturated mineral lines (only manages if there are un-saturated bases)
+	#	if not self.drone_saturation:
+	#		for original_hatch in self.get_oversaturated_bases():
+	#			for random_worker in self.workers.closer_than(17, original_hatch):
+	#				target_hatch = self.get_unsaturated_bases.closest_to(original_hatch)
+	#				await self.do(random_worker.gather(self.state.mineral_field.closest_to(target_hatch)))
+	#				break
+	###############################################################################################################
+
 	# Building location - NOT in mineral line, in first base
 	# built more drones that 70 (76), but did stop in the end
 	# prioritise gas gysers in main b4 2nd or 3rd
 	async def on_step(self, iteration):
 		if iteration == 0:
 			print("Bot has started iteration: " + str(iteration))
+			self.opponentInfo["spawnLocation"] = self.enemy_start_locations[0]
 		# updating variables
 		self.drone_count = self.units(DRONE).amount + self.already_pending(DRONE)
 		self.unit_production = [True]
@@ -199,23 +237,35 @@ class ZergBotV2(sc2.BotAI):
 			self.drone_saturation = True
 
 		# defaulting to inbuilt function for now, await self.manage_drones()
-		self.larva_controller()
 		if iteration % self.workerTransferInterval == 0:
 			await self.distribute_workers()
 		if iteration % self.buildStuffInverval == 0:
-			await self.build_overlords()
+			# units - larva
+			self.do_overlord_production()
+			self.larva_controller()
+			await self.build_units()
+			# buildings
 			await self.offensive_force_buildings()
-			if all(self.unit_production):
-				await self.build_units()
-			if all(self.is_expanding):
-				await self.expand()
+			await self.expand()
 			await self.gas()
 		if iteration % self.microInterval == 0:
 			await self.attack_decision()
 			await self.attacking()
 		
 		
-		
+		'''pos = await self.find_placement(SPAWNINGPOOL, townhallLocationFurthestFromOpponent, min_distance=6)
+                    # pos = await self.find_placement(SPAWNINGPOOL, self.townhalls.ready.random.position.to2, min_distance=6)
+                    if pos is not None:
+                        drone = self.workers.closest_to(pos)
+                        if self.can_afford(SPAWNINGPOOL):
+                            err = await self.do(drone.build(SPAWNINGPOOL, pos))
+
+        # townhall furthest away from enemy base - that is where i will make all the tech buildings
+            townhallLocationFurthestFromOpponent = None
+            if self.townhalls.ready.exists and self.known_enemy_structures.exists:
+                townhallLocationFurthestFromOpponent = max([x.position.to2 for x in self.townhalls.ready], key=lambda x: x.closest(self.known_enemy_structures).distance_to(x))
+            if townhallLocationFurthestFromOpponent is None and self.townhalls.ready.exists:
+                townhallLocationFurthestFromOpponent = self.townhalls.ready.random.position.to2'''
 	
 #running the game:
 # first parameter is the map
