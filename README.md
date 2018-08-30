@@ -14,7 +14,7 @@ For now:<br />
     upgrades? roach speed and +1+1<br  />
     building location of pool and warren (can be in mineral line)<br  />
     anti-air?<br  />
-  Other expansions:<br  />
+  Other thins:<br  />
     scouting<br  />
     queens (inject and creep spread)<br  />
   
