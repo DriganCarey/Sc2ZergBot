@@ -16,15 +16,17 @@ class ZergBotV2(sc2.BotAI):
 		self.drone_saturation = False
 
 		self.unit_production_index = 0
-		self.unit_production_list = [DRONE ]
+		self.unit_production_list = []
 		self.unit_production = []
 		self.overlord_production = False
 
+		self.unit_strategy = None
 		self.can_attack_air = [QUEEN, HYDRALISK, MUTALISK, CORRUPTOR]
 		self.can_attack_ground = [ROACH, DRONE, QUEEN, BANELING, RAVAGER, HYDRALISK, ULTRALISK, MUTALISK, BROODLORD]
-		self.attack = False
-		self.defend = True
+		self.my_attack_group = set()
+		self.my_defence_group = set()
 		self.defendRangeToTownhalls = 30 # how close the enemy has to be before defenses are alerted
+		self.first_hatchery = None
 
 		self.opponentInfo = {
 			"spawnLocation": None, # for 4player maps
@@ -43,6 +45,7 @@ class ZergBotV2(sc2.BotAI):
 		self.injectInterval = 100
 		self.workerTransferInterval = 10
 		self.buildStuffInverval = 4
+		self.unitTargetting = 10
 		self.microInterval = 3
 
 
@@ -117,7 +120,7 @@ class ZergBotV2(sc2.BotAI):
 
 	async def offensive_force_buildings(self):
 		if not self.units(SPAWNINGPOOL).ready.exists and not self.already_pending(SPAWNINGPOOL):
-			if self.time > 60:
+			if self.time > 70:
 				self.unit_production.append(False)
 				self.is_expanding.append(False)
 				if self.can_afford(SPAWNINGPOOL):
@@ -133,58 +136,60 @@ class ZergBotV2(sc2.BotAI):
 
 
 	############################################
-	''' MICRO/ATTACKING UNIT DECISION MAKING '''
+	''' ATTACKING UNIT DECISION MAKING '''
 	############################################
 	# makes decision whether to be attacking and or defending
-	async def attack_decision(self):
+	def attack_decision(self):
 		if self.units(ROACH).amount > 30:
-			self.attack = True
-			self.defend = False
+			self.unit_strategy = "all_in_attack"
 		# only want to defend
 		elif self.units(ROACH).amount > 3:
-			self.attack = False
-			self.defend = True
+			self.unit_strategy = "pure_defense"
 
+	#x.orders[0].ability.id in [AbilityId.MOVE, AbilityId.SCAN_MOVE, AbilityId.ATTACK]
 	# acting upon decision above
-	async def attacking(self):
-		if self.attack and not self.defend:
+	async def updating_unit_targetting(self):
+		if self.unit_strategy == "all_in_attack":
 			myArmy = self.units(ROACH)
+			target = self.find_targets().closest_to(self.first_hatchery)
+			if target == None:
+				target = self.opponentInfo["spawnLocation"]
 			for unit in myArmy:
-				target = self.find_target(self.state, unit)
-				if not target == None:
-					await self.do(unit.attack(target))
-		elif self.defend and not self.attack:
+				await self.do(unit.attack(target))
+		elif self.unit_strategy == "pure_defense":
 			myArmy = self.units(ROACH)
-			for unit in myArmy:
-				target = self.find_defense_target(self.state, unit)
-				if not target == None:
+			target = self.find_targets(defence = True).closest_to(self.first_hatchery)
+			if not target == None:
+				for unit in myArmy:
 					await self.do(unit.attack(target))
-				#else:
-				#	await self.do(unit.move(self.townhalls.random))
 
-	# finding targets
-	def find_defense_target(self, state, attacking_unit: Unit):
-		# add threats: all enemy units that are closer than 30 to nearby townhalls (which are completed)
-		unit_threats = set()
-		structure_threats = set()
-		for th in self.townhalls.ready:
-			enemiesCloseToTh = self.known_enemy_units.closer_than(self.defendRangeToTownhalls, th.position)
-			unit_threats |= {x.tag for x in enemiesCloseToTh}
-		if len(unit_threats) > 0:
-			return self.state.units.filter(lambda x: x.tag in unit_threats).closest_to(attacking_unit)
-		else:
-			return None
+	# returns all "known enemy units and structures" with an option defence which will limit the enemy units to ones within range of a townhall
+	def find_targets(self, defence = False, air = False, ground = True, include_invisible = False):
+		threats = set()
+		_known_enemy_units = self.known_enemy_units
+		_known_enemy_structures = self.known_enemy_structures
 
-	def find_target(self, state, attacking_unit: Unit):
-		unit_threats = self.known_enemy_units.filter(lambda x: ((x.is_flying and attacking_unit.type_id in self.can_attack_air)
-			or (not x.is_flying and attacking_unit.type_id in self.can_attack_ground)) and not x.type_id in [DRONE, OVERLORD, OVERSEER, OVERLORDTRANSPORT, OVERSEERSIEGEMODE])
-		structure_threats = self.known_enemy_structures.filter(lambda x: (x.is_flying and attacking_unit.type_id in self.can_attack_air) or (not x.is_flying and attacking_unit.type_id in self.can_attack_ground))
-		if len(unit_threats) > 0:
-			return unit_threats.closest_to(attacking_unit)
-		elif len(structure_threats) > 0:
-			return structure_threats.closest_to(attacking_unit)
+		if not include_invisible:
+			_known_enemy_units = _known_enemy_units.filter(lambda x: x.is_visible)
+			_known_enemy_structures = _known_enemy_structures.filter(lambda x: x.is_visible)
+
+		if air and not ground:
+			_known_enemy_units = _known_enemy_units.filter(lambda x: x.is_flying)
+			_known_enemy_structures = _known_enemy_structures.filter(lambda x: x.is_flying)
+		elif ground and not air:
+			_known_enemy_units = _known_enemy_units.filter(lambda x: not x.is_flying)
+			_known_enemy_structures = _known_enemy_structures.filter(lambda x: not x.is_flying)
+		
+		if defence:
+			for th in self.townhalls.ready:
+				threat = _known_enemy_units.closer_than(self.defendRangeToTownhalls, th.position)
+				threats |= {x.tag for x in threat}
+				threat = _known_enemy_structures.closer_than(self.defendRangeToTownhalls, th.position)
+				threats |= {x.tag for x in threat}
+			return self.state.units.filter(x.tag in threats)
 		else:
-			return self.enemy_start_locations[0]
+			return (_known_enemy_units + _known_enemy_structures)
+
 
 
 	#######################
@@ -228,6 +233,7 @@ class ZergBotV2(sc2.BotAI):
 		if iteration == 0:
 			print("Bot has started iteration: " + str(iteration))
 			self.opponentInfo["spawnLocation"] = self.enemy_start_locations[0]
+			self.first_hatchery = self.townhalls.random
 		# updating variables
 		self.drone_count = self.units(DRONE).amount + self.already_pending(DRONE)
 		self.unit_production = [True]
@@ -249,8 +255,10 @@ class ZergBotV2(sc2.BotAI):
 			await self.expand()
 			await self.gas()
 		if iteration % self.microInterval == 0:
-			await self.attack_decision()
-			await self.attacking()
+			pass
+		if iteration % self.unitTargetting == 0:
+			self.attack_decision()
+			await self.updating_unit_targetting()
 		
 		
 		'''pos = await self.find_placement(SPAWNINGPOOL, townhallLocationFurthestFromOpponent, min_distance=6)
