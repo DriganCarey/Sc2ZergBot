@@ -96,11 +96,11 @@ class TestBot(sc2.BotAI):
 			print("Inject queue: " + str(self.hatcherys[0][2]))
 		
 		# macro cycle
-		if current_time%18 == 0:
+		if current_time%15 == 0:
 			# OVERLORD
 			needed_supply = self.predict_needed_supply(18)
 			will_be_supply = self.get_to_be_avaliable_supply()
-			diff = needed_supply - will_be_supply
+			diff = needed_supply - will_be_supply	
 			if (diff > 0):
 				if self.can_afford(OVERLORD) and self.units(LARVA).exists:
 					err = await self.do(self.units(LARVA).random.train(OVERLORD))

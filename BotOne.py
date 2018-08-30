@@ -7,41 +7,39 @@ from sc2 import Race, Difficulty, maps, run_game
 from sc2.constants import *
 from sc2.player import Bot, Computer
 from sc2.data import race_townhalls
-
+from sc2.unit import Unit
+from sc2.units import Units
 
 class ZergBotV2(sc2.BotAI):
 	def __init__(self):
 		self.drone_count = 0
-		self.unit_production_index = 0
-		self.unit_production_list = ["DRONE"]
-		self.unit_production = []
 		self.drone_saturation = False
-		self.can_attack_air = []
-		self.can_attack_ground = [ROACH, DRONE]
 
-	# GET ALL AVALIABLE VESPENE GEYSERS
-	# gets a list of vespene geysers that aren't occupied, are next to a finished hatchery and aren't empty
-	# DOESNT CHECK IF THERE ARE EMPTY and whether are blocked
-	def get_avaliable_gysers(self, hatchery: "Unit"):
-		# creates a list of viable gysers near hatchery
-		vespeneGeysers = []
-		for vg in self.state.vespene_geyser.closer_than(10, hatchery):
-			# checking if the vg is already occupied
-			if not (self.units(EXTRACTOR).closer_than(1.0, vg).exists or self.units(ASSIMILATOR).closer_than(1.0, vg).exists or self.units(REFINERY).closer_than(1.0, vg).exists):
-				vespeneGeysers.append(vg)
-		return vespeneGeysers
+		self.unit_production_index = 0
+		self.unit_production_list = [DRONE ]
+		self.unit_production = []
+
+		self.can_attack_air = [QUEEN, HYDRALISK, MUTALISK, CORRUPTOR]
+		self.can_attack_ground = [ROACH, DRONE, QUEEN, BANELING, RAVAGER, HYDRALISK, ULTRALISK, MUTALISK, BROODLORD]
+
+		self.attack = False
+		self.defend = True
+		self.defendRangeToTownhalls = 30 # how close the enemy has to be before defenses are alerted
+
+		self.creepSpreadInterval = 10
+		self.injectInterval = 100
+		self.workerTransferInterval = 10
+		self.buildStuffInverval = 4
+		self.microInterval = 3
 
 	#variable definitions:
-	@property
-	def get_unsaturated_bases(self) -> "Units":
+	def get_unsaturated_bases(self) -> Units:
 		return self.townhalls.ready.filter(lambda x: x.assigned_harvesters < x.ideal_harvesters)
 
-	@property
-	def get_oversaturated_bases(self) -> "Units":
+	def get_oversaturated_bases(self) -> Units:
 		return self.townhalls.ready.filter(lambda x: x.assigned_harvesters > x.ideal_harvesters)
 
-	@property
-	def get_saturated(self) -> "Units":
+	def get_saturated(self) -> Units:
 		return self.townhalls.ready.filter(lambda x: x.assigned_harvesters >= x.ideal_harvesters)
 
 	async def manage_drones(self):
@@ -63,17 +61,26 @@ class ZergBotV2(sc2.BotAI):
 					await self.do(random_worker.gather(self.state.mineral_field.closest_to(target_hatch)))
 					break
 
+	# BUILDING VARIABLE UNITS
+	def larva_controller(self):
+		if self.drone_count < 33 or not self.units(ROACHWARREN).ready.exists:
+			self.unit_production_list = [DRONE]
+		elif self.drone_count < 70 and self.units(ROACHWARREN).ready.exists:
+			self.unit_production_list = [DRONE, ROACH]
+		else:
+			self.unit_production_list = [ROACH]
+
 	async def build_units(self):
 		if self.units(LARVA).exists:
 			if self.unit_production_index < len(self.unit_production_list):
 				current_unit = self.unit_production_list[self.unit_production_index]
-				if current_unit == "DRONE":
-					if self.can_afford(DRONE) and self.supply_left >= 1:
-						await self.do(self.units(LARVA).random.train(DRONE))
+				if current_unit in [DRONE, ZERGLING]:
+					if self.can_afford(current_unit) and self.supply_left >= 1:
+						await self.do(self.units(LARVA).random.train(current_unit))
 						self.unit_production_index += 1
-				elif current_unit == "ROACH":
-					if self.can_afford(ROACH) and self.supply_left >= 2:
-						await self.do(self.units(LARVA).random.train(ROACH))
+				elif current_unit in [ROACH]:
+					if self.can_afford(current_unit) and self.supply_left >= 2:
+						await self.do(self.units(LARVA).random.train(current_unit))
 						self.unit_production_index += 1
 			else:
 				self.unit_production_index = 0
@@ -82,6 +89,19 @@ class ZergBotV2(sc2.BotAI):
 		if self.supply_left + (self.already_pending(OVERLORD)*8) < (5 * self.townhalls.ready.amount) and self.supply_cap + self.already_pending(OVERLORD) * 8 < 200:
 			if self.units(LARVA).exists and self.can_afford(OVERLORD):
 				await self.do(self.units(LARVA).random.train(OVERLORD))
+
+	# BUILDING BUILDINGS
+	# GET ALL AVALIABLE VESPENE GEYSERS
+	# gets a list of vespene geysers that aren't occupied, are next to a finished hatchery and aren't empty
+	# DOESNT CHECK IF THERE ARE EMPTY and whether are blocked
+	def get_avaliable_gysers(self, hatchery: Unit):
+		# creates a list of viable gysers near hatchery
+		vespeneGeysers = []
+		for vg in self.state.vespene_geyser.closer_than(10, hatchery):
+			# checking if the vg is already occupied
+			if not (self.units(EXTRACTOR).closer_than(1.0, vg).exists or self.units(ASSIMILATOR).closer_than(1.0, vg).exists or self.units(REFINERY).closer_than(1.0, vg).exists):
+				vespeneGeysers.append(vg)
+		return vespeneGeysers
 
 	async def expand(self):
 		if self.townhalls.amount < 3 and self.can_afford(HATCHERY):
@@ -113,33 +133,54 @@ class ZergBotV2(sc2.BotAI):
 			if self.can_afford(SPAWNINGPOOL):
 				await self.build(SPAWNINGPOOL, near = self.units(HATCHERY).ready.first)
 
-	async def attack(self):
+	async def attack_decision(self):
 		if self.units(ROACH).amount > 30:
-			for s in self.units(ROACH).idle:
-				await self.do(s.attack(self.find_target(self.state, s)))
-
+			self.attack = True
+			self.defend = False
+		# only want to defend
 		elif self.units(ROACH).amount > 3:
-			enemy_units = self.known_enemy_units.filter(lambda x: (not x.is_flying))
-			if len(enemy_units) > 0:
-				for s in self.units(ROACH).idle:
-					await self.do(s.attack(random.choice(enemy_units)))
+			self.attack = False
+			self.defend = True
 
-	def larva_controller(self):
-		if self.drone_count < 33 or not self.units(ROACHWARREN).ready.exists:
-			self.unit_production_list = ["DRONE"]
-		elif self.drone_count < 70 and self.units(ROACHWARREN).ready.exists:
-			self.unit_production_list = ["DRONE", "ROACH"]
+	async def attacking(self):
+		if self.attack and not self.defend:
+			myArmy = self.units(ROACH)
+			for unit in myArmy:
+				target = self.find_target(self.state, unit)
+				if not target == None:
+					await self.do(unit.attack(target))
+		elif self.defend and not self.attack:
+			myArmy = self.units(ROACH)
+			for unit in myArmy:
+				target = self.find_defense_target(self.state, unit)
+				if not target == None:
+					await self.do(unit.attack(target))
+				#else:
+				#	await self.do(unit.move(self.townhalls.random))
+
+	def find_defense_target(self, state, attacking_unit: Unit):
+		# add threats: all enemy units that are closer than 30 to nearby townhalls (which are completed)
+		unit_threats = set()
+		structure_threats = set()
+		for th in self.townhalls.ready:
+			enemiesCloseToTh = self.known_enemy_units.closer_than(self.defendRangeToTownhalls, th.position)
+			unit_threats |= {x.tag for x in enemiesCloseToTh}
+		if len(unit_threats) > 0:
+			return self.state.units.filter(lambda x: x.tag in unit_threats).closest_to(attacking_unit)
 		else:
-			self.unit_production_list = ["ROACH"]
+			return None
 
-	def find_target(self, state, attacking_unit: "Unit"):
-		enemy_units = self.known_enemy_units.filter(lambda x: (x.is_flying and attacking_unit.type_id in self.can_attack_air) or (not x.is_flying and attacking_unit.type_id in self.can_attack_ground))
-		if len(enemy_units) > 0:
-			return random.choice(enemy_units)
-		elif len(self.known_enemy_structures) > 0 and attacking_unit.type_id in canAttackGround:
-			return random.choice(self.known_enemy_structures)
+	def find_target(self, state, attacking_unit: Unit):
+		unit_threats = self.known_enemy_units.filter(lambda x: ((x.is_flying and attacking_unit.type_id in self.can_attack_air)
+			or (not x.is_flying and attacking_unit.type_id in self.can_attack_ground)) and not x.type_id in [DRONE, OVERLORD, OVERSEER, OVERLORDTRANSPORT, OVERSEERSIEGEMODE])
+		structure_threats = self.known_enemy_structures.filter(lambda x: (x.is_flying and attacking_unit.type_id in self.can_attack_air) or (not x.is_flying and attacking_unit.type_id in self.can_attack_ground))
+		if len(unit_threats) > 0:
+			return unit_threats.closest_to(attacking_unit)
+		elif len(structure_threats) > 0:
+			return structure_threats.closest_to(attacking_unit)
 		else:
 			return self.enemy_start_locations[0]
+
 
 	# DRONES NOT BEING PUT INTO GAS
 	# DELAY IN BUILDING EXTRACTOR AFTER FINISHING ONE?
@@ -149,26 +190,30 @@ class ZergBotV2(sc2.BotAI):
 	async def on_step(self, iteration):
 		if iteration == 0:
 			print("Bot has started iteration: " + str(iteration))
-		if iteration % 5 == 0:
-			# updating variables
-			self.drone_count = self.units(DRONE).amount + self.already_pending(DRONE)
-			self.unit_production = [True]
-			self.is_expanding = [True]
-			self.drone_saturation = False
-			if (self.get_unsaturated_bases().amount == 0):
-				self.drone_saturation = True
+		# updating variables
+		self.drone_count = self.units(DRONE).amount + self.already_pending(DRONE)
+		self.unit_production = [True]
+		self.is_expanding = [True]
+		self.drone_saturation = False
+		if (self.get_unsaturated_bases().amount == 0):
+			self.drone_saturation = True
 
-			# defaulting to inbuilt function for now, await self.manage_drones()
-			self.larva_controller()
+		# defaulting to inbuilt function for now, await self.manage_drones()
+		self.larva_controller()
+		if iteration % self.workerTransferInterval == 0:
 			await self.distribute_workers()
+		if iteration % self.buildStuffInverval == 0:
 			await self.build_overlords()
 			await self.offensive_force_buildings()
 			if all(self.unit_production):
 				await self.build_units()
 			if all(self.is_expanding):
 				await self.expand()
-			await self.attack()
 			await self.gas()
+		if iteration % self.microInterval == 0:
+			await self.attack_decision()
+			await self.attacking()
+		
 		
 		
 	
@@ -176,6 +221,6 @@ class ZergBotV2(sc2.BotAI):
 # first parameter is the map
 # second parameter is the list of players/bots
 # third is whether the game should be in a realtime, or sped up
-for i in range(5):
+for i in range(1):
 	print (i)
 	run_game(maps.get("AbyssalReefLE"), [Bot(Race.Zerg, ZergBotV2()), Computer(Race.Random, Difficulty.Medium)], realtime = False)
