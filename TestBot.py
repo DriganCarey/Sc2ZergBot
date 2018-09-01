@@ -49,6 +49,8 @@ class TestBot(sc2.BotAI):
 			#print("All of my structures")
 			#for structure in self.state.units.owned.structure:
 			#	print (str(structure) + ": " + str(structure.orders))
+			for structure in self.units(EXTRACTOR).ready:
+				print(str(structure.assigned_harvesters) + " out of " + str(structure.ideal_harvesters))
 			#print("----------------------------------------------------------------")
 			#print("All of my opponents units")
 			#print(self.state.units.enemy.not_structure)
@@ -56,7 +58,7 @@ class TestBot(sc2.BotAI):
 			#print("All of my opponents structure")
 			#for structure in self.state.units.enemy.structure:
 			#	print ("orders: " + str(structure) + ": " + str(structure.build_progress))
-			print (dir(self.state.units))
+			#print (dir(self.state.units))
 			print("=================================================================")
 
 
