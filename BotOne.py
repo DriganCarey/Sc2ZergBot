@@ -136,7 +136,9 @@ class ZergBotV2(sc2.BotAI):
 
 	async def build_queens(self):
 		if self.units(SPAWNINGPOOL).exists:
-			pass
+			pending_queens = 0
+			for hatch in townhalls:
+				pass
 
 
 	###########################
